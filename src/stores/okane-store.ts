@@ -149,18 +149,23 @@ export type HabitState = {
 };
 
 export type AppState = {
+  activeUserEmail: string | null;
+  setActiveUserEmail: (email: string | null) => void;
+
   transactions: Transaction[];
   userProgress: UserProgress;
   latestReflection: LatestReflection | null;
   insights: Insight[];
   habit: HabitState;
 
+  reset: () => void;
   addTransaction: (tx: Transaction) => void;
   calculateConsistency: () => void;
   unlockFeatures: () => void;
   updateStreak: (date: string) => void;
   getConsistency: () => string;
   setLatestReflection: (reflection: { remaining: string; improve: string; reduce: string }) => Promise<boolean>;
+  loadData: () => Promise<void>;
   loadFromApi: () => Promise<void>;
   loadInsightsFromApi: () => Promise<void>;
 };
@@ -246,11 +251,23 @@ function nextStreak(prev: HabitState, today: string): HabitState {
 
 export const useAppStore = create<AppState>()(
   (set, get) => ({
+    activeUserEmail: null,
+    setActiveUserEmail: (email) => set({ activeUserEmail: email }),
+
     transactions: [],
     userProgress: { transactionDates: [], isConsistent: false, unlockedFeatures: ["core"] },
     latestReflection: null,
     insights: [],
     habit: { streak: 0, lastEntryDate: null, activeDays: [] },
+
+    reset: () =>
+      set({
+        transactions: [],
+        userProgress: { transactionDates: [], isConsistent: false, unlockedFeatures: ["core"] },
+        latestReflection: null,
+        insights: [],
+        habit: { streak: 0, lastEntryDate: null, activeDays: [] }
+      }),
 
     addTransaction: (tx) => {
       const day = toDayKey(tx.date);
@@ -270,7 +287,7 @@ export const useAppStore = create<AppState>()(
             })
           });
           if (!res.ok) return;
-          await get().loadFromApi();
+          await get().loadData();
         } catch {
           return;
         }
@@ -333,15 +350,21 @@ export const useAppStore = create<AppState>()(
         });
 
         if (!res.ok) return false;
-        await get().loadFromApi();
+        await get().loadData();
         return true;
       } catch {
         return false;
       }
     },
 
+    loadData: async () => {
+      await get().loadFromApi();
+      await get().loadInsightsFromApi();
+    },
+
     loadFromApi: async () => {
       try {
+        const expectedUser = get().activeUserEmail;
         const [txRes, reflRes] = await Promise.all([
           fetch("/api/transactions", { cache: "no-store" }),
           fetch("/api/reflections", { cache: "no-store" })
@@ -386,6 +409,7 @@ export const useAppStore = create<AppState>()(
           for (const f of ["savings", "savings_tracker", "advanced_categories", "modules"]) unlocked.add(f);
         }
 
+        if (expectedUser !== get().activeUserEmail) return;
         set({
           transactions: txs,
           latestReflection,
@@ -403,10 +427,12 @@ export const useAppStore = create<AppState>()(
 
     loadInsightsFromApi: async () => {
       try {
+        const expectedUser = get().activeUserEmail;
         const res = await fetch("/api/insights", { cache: "no-store" });
         if (!res.ok) return;
         const rows = (await res.json()) as Insight[];
         if (!Array.isArray(rows)) return;
+        if (expectedUser !== get().activeUserEmail) return;
         set({ insights: rows });
       } catch {
         return;
