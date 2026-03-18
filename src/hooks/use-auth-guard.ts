@@ -2,32 +2,40 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-
-import { useOkaneStore, type OkaneState } from "@/stores/okane-store";
+import { useSession } from "next-auth/react";
 
 export function useAuthGuard() {
   const router = useRouter();
   const pathname = usePathname();
-  const user = useOkaneStore((s: OkaneState) => s.user);
-  const hasHydrated = useOkaneStore((s: OkaneState) => s.hasHydrated);
-  const onboardingCompleted = useOkaneStore((s: OkaneState) => s.onboarding.completed);
+  const { data: session, status } = useSession();
 
   useEffect(() => {
-    if (!hasHydrated) return;
-    if (!user) {
+    if (status === "loading") return;
+    if (!session?.user?.email) {
       if (pathname === "/login") return;
       router.replace("/login");
       return;
     }
 
-    if (!onboardingCompleted) {
-      if (pathname === "/onboarding") return;
-      router.replace("/onboarding");
-      return;
-    }
+    void (async () => {
+      try {
+        const res = await fetch("/api/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as { onboardingCompleted?: boolean };
+        const onboardingCompleted = Boolean(json.onboardingCompleted);
 
-    if (pathname === "/onboarding") {
-      router.replace("/dashboard");
-    }
-  }, [hasHydrated, onboardingCompleted, pathname, router, user]);
+        if (!onboardingCompleted) {
+          if (pathname === "/onboarding") return;
+          router.replace("/onboarding");
+          return;
+        }
+
+        if (pathname === "/onboarding") {
+          router.replace("/dashboard");
+        }
+      } catch {
+        return;
+      }
+    })();
+  }, [pathname, router, session?.user?.email, status]);
 }
