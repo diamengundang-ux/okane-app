@@ -5,11 +5,13 @@ import { authOptions } from "@/lib/auth";
 import { query } from "@/server/db";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email?.trim() ?? "";
-  if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
 
   const body = (await request.json()) as Partial<{ goal: string; monthlyIncome: number }>;
   const goal = typeof body.goal === "string" ? body.goal.trim() : "";
@@ -21,6 +23,5 @@ export async function POST(request: Request) {
     [goal, monthlyIncome, email]
   );
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
-
