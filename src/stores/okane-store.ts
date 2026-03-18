@@ -40,7 +40,7 @@ export type OkaneState = {
   recomputeUserProgress: () => void;
 
   user: User | null;
-  signInWithGoogleMock: () => void;
+  signInWithGoogle: (token: string) => Promise<boolean>;
   signOut: () => void;
 
   onboarding: OnboardingState;
@@ -186,14 +186,34 @@ export const useOkaneStore = create<OkaneState>()(
       },
 
       user: null,
-      signInWithGoogleMock: () => {
-        set({
-          user: {
-            id: createId(),
-            name: "Okane User",
-            email: "user@okane.app"
+      signInWithGoogle: async (token) => {
+        try {
+          const res = await fetch("/api/auth/google", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ token })
+          });
+          if (!res.ok) return false;
+
+          const json = (await res.json()) as {
+            user?: { id?: string; name?: string; email?: string };
+          };
+          const u = json.user;
+          if (!u || typeof u.id !== "string" || typeof u.name !== "string" || typeof u.email !== "string") {
+            return false;
           }
-        });
+
+          set({
+            user: {
+              id: u.id,
+              name: u.name,
+              email: u.email
+            }
+          });
+          return true;
+        } catch {
+          return false;
+        }
       },
       signOut: () => set({ user: null }),
 
