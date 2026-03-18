@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { query } from "@/server/db";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type DbUser = {
   id: string;
@@ -19,7 +21,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email?.trim() ?? "";
   const name = session?.user?.name?.trim() ?? "";
-  if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
 
   const found = await query<DbUser>(
     "select id, email, name, onboarding_completed, goal, monthly_income from users where email = $1",
@@ -32,7 +34,10 @@ export async function GET() {
       "insert into users (id, email, name) values ($1, $2, $3) returning id, email, name, onboarding_completed, goal, monthly_income",
       [id, email, name || email]
     );
-    return NextResponse.json({ isNewUser: true, onboardingCompleted: false, user: inserted.rows[0] });
+    return NextResponse.json(
+      { isNewUser: true, onboardingCompleted: false, user: inserted.rows[0] },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   }
 
   const user = found.rows[0];
@@ -46,5 +51,5 @@ export async function GET() {
     isNewUser: false,
     onboardingCompleted,
     user
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }
