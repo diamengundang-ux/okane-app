@@ -1,9 +1,9 @@
 "use client";
 
 import { LogOut } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
-import { useOkaneStore, type OkaneState } from "@/stores/okane-store";
 
 function getNameFromEmail(email: string) {
   const base = email.split("@")[0] ?? "";
@@ -13,9 +13,9 @@ function getNameFromEmail(email: string) {
 }
 
 export function TopBar() {
-  const user = useOkaneStore((s: OkaneState) => s.user);
-  const signOut = useOkaneStore((s: OkaneState) => s.signOut);
-  const name = user?.name?.trim() || (user?.email ? getNameFromEmail(user.email) : "Kamu");
+  const { data: session } = useSession();
+  const email = session?.user?.email ?? "";
+  const name = session?.user?.name?.trim() || (email ? getNameFromEmail(email) : "Kamu");
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
@@ -23,13 +23,13 @@ export function TopBar() {
         <div className="min-w-0">
           <div className="text-sm font-semibold tracking-tight">Okane</div>
           <div className="truncate text-xs text-muted-foreground">
-            Halo, {name} 👋{user?.email ? ` · ${user.email}` : ""}
+            Halo, {name} 👋{email ? ` · ${email}` : ""}
           </div>
         </div>
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => signOut()}
+          onClick={() => void signOut({ callbackUrl: "/login" })}
           aria-label="Sign out"
         >
           <LogOut />
