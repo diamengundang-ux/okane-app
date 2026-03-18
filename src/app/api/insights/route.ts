@@ -20,7 +20,7 @@ type DbReflection = {
   combined_text: string;
 };
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.trim() ?? "";
