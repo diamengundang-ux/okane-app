@@ -37,8 +37,7 @@ export async function GET() {
 
   return NextResponse.json({
     isNewUser: false,
-    onboardingCompleted: Boolean(found.rows[0].onboarding_completed),
+    onboardingCompleted: true,
     user: found.rows[0]
   });
 }
-
