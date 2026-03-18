@@ -35,9 +35,16 @@ export async function GET() {
     return NextResponse.json({ isNewUser: true, onboardingCompleted: false, user: inserted.rows[0] });
   }
 
+  const user = found.rows[0];
+  const hasActivity = await query<{ exists: boolean }>(
+    "select exists(select 1 from transactions where user_id = $1) or exists(select 1 from reflections where user_id = $1) as exists",
+    [user.id]
+  );
+  const onboardingCompleted = Boolean(user.onboarding_completed) || Boolean(hasActivity.rows[0]?.exists);
+
   return NextResponse.json({
     isNewUser: false,
-    onboardingCompleted: true,
-    user: found.rows[0]
+    onboardingCompleted,
+    user
   });
 }
