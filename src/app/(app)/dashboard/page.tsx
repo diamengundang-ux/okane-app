@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect } from "react";
 import { ArrowUpRight, Plus } from "lucide-react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -127,7 +126,6 @@ export default function DashboardPage() {
   const latestReflection = useAppStore((s) => s.latestReflection);
   const habit = useAppStore((s) => s.habit);
   const getConsistency = useAppStore((s) => s.getConsistency);
-  const loadFromApi = useAppStore((s) => s.loadFromApi);
   const categories = useOkaneStore((s: OkaneState) => s.categories);
 
   const transactions = toOkaneTransactions(appTransactions);
@@ -216,10 +214,6 @@ export default function DashboardPage() {
           nowIso
         })
       : null;
-
-  useEffect(() => {
-    void loadFromApi();
-  }, [loadFromApi]);
 
   return (
     <div className="space-y-5">
