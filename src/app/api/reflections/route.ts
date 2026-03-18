@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 
+import { authOptions } from "@/lib/auth";
 import { pool, testDb } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -16,9 +18,23 @@ type DbReflection = {
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email?.trim() ?? "";
+    const name = session?.user?.name?.trim() ?? "";
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     await testDb();
+    const userResult = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
+    const userId = userResult.rows[0]?.id;
+    if (!userId) {
+      const createdId = crypto.randomUUID();
+      await pool.query("insert into users (id, email, name) values ($1, $2, $3)", [createdId, email, name || email]);
+      return NextResponse.json([]);
+    }
+
     const result = await pool.query<DbReflection>(
-      "select id, user_id, sisa, perbaikan, kurangi, combined_text, created_at from reflections order by created_at desc limit 50"
+      "select id, user_id, sisa, perbaikan, kurangi, combined_text, created_at from reflections where user_id = $1 order by created_at desc limit 50",
+      [userId]
     );
     return NextResponse.json(result.rows);
   } catch (err) {
@@ -30,9 +46,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email?.trim() ?? "";
+    const name = session?.user?.name?.trim() ?? "";
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     await testDb();
     const body = (await request.json()) as Partial<{
-      user_id: string;
       sisa: string;
       perbaikan: string;
       kurangi: string;
@@ -61,18 +81,10 @@ export async function POST(request: Request) {
           ? body.reduce.trim()
           : "";
     const createdAt = typeof body.created_at === "string" ? body.created_at : new Date().toISOString();
-    const demoUserId = "00000000-0000-0000-0000-000000000000";
-    const userId = typeof body.user_id === "string" ? body.user_id.trim() : demoUserId;
-
-    if (!userId) {
-      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
-    }
-
-    if (userId === demoUserId) {
-      await pool.query(
-        "insert into users (id, email, name) values ($1, $2, $3) on conflict (id) do nothing",
-        [demoUserId, "demo@okane.local", "Demo"]
-      );
+    const userResult = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
+    const userId = userResult.rows[0]?.id ?? crypto.randomUUID();
+    if (!userResult.rows[0]) {
+      await pool.query("insert into users (id, email, name) values ($1, $2, $3)", [userId, email, name || email]);
     }
 
     const combinedText = `${sisa}\n${perbaikan}\n${kurangi}`.trim();
