@@ -7,6 +7,8 @@ import type { Transaction } from "@/lib/types";
 import { pool, testDb } from "@/lib/db";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type DbTransaction = {
   id: string;
@@ -25,7 +27,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.trim() ?? "";
     const name = session?.user?.name?.trim() ?? "";
-    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
 
     await testDb();
     const now = new Date();
@@ -37,7 +39,7 @@ export async function GET() {
     if (!userId) {
       const createdId = crypto.randomUUID();
       await pool.query("insert into users (id, email, name) values ($1, $2, $3)", [createdId, email, name || email]);
-      return NextResponse.json([]);
+      return NextResponse.json([], { headers: { "Cache-Control": "no-store" } });
     }
 
     const [txResult, reflectionResult] = await Promise.all([
@@ -67,10 +69,10 @@ export async function GET() {
       latestReflectionText: reflectionResult.rows[0]?.combined_text || ""
     });
 
-    return NextResponse.json(insights);
+    return NextResponse.json(insights, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("INSIGHTS ERROR:", err);
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500, headers: { "Cache-Control": "no-store" } });
   }
 }
