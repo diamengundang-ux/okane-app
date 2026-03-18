@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { ArrowUpRight, Plus } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,7 @@ function formatWeeklyPeriod(nowIso: string) {
 }
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
   const appTransactions = useAppStore((s) => s.transactions);
   const appProgress = useAppStore((s) => s.userProgress);
   const latestReflection = useAppStore((s) => s.latestReflection);
@@ -127,7 +129,6 @@ export default function DashboardPage() {
   const getConsistency = useAppStore((s) => s.getConsistency);
   const loadFromApi = useAppStore((s) => s.loadFromApi);
   const categories = useOkaneStore((s: OkaneState) => s.categories);
-  const user = useOkaneStore((s: OkaneState) => s.user);
 
   const transactions = toOkaneTransactions(appTransactions);
   const daysActive = appProgress.transactionDates.length;
@@ -192,7 +193,7 @@ export default function DashboardPage() {
     reflection: latestReflection?.text ?? null,
     habit
   });
-  const name = user?.name?.trim() || "Kamu";
+  const name = session?.user?.name?.trim() || session?.user?.email?.trim() || "Kamu";
 
   const nowIso = new Date().toISOString();
   const weeklyPeriod = formatWeeklyPeriod(nowIso);
