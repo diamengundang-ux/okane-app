@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,8 @@ const reflectionSchema = z.object({
 type ReflectionFormValues = z.infer<typeof reflectionSchema>;
 
 export default function ReflectionPage() {
+  const { data: session, status } = useSession();
+  const userEmail = session?.user?.email ?? null;
   const progress = useAppStore((s) => s.userProgress);
   const setLatestReflection = useAppStore((s) => s.setLatestReflection);
   const loadInsightsFromApi = useAppStore((s) => s.loadInsightsFromApi);
@@ -41,6 +44,11 @@ export default function ReflectionPage() {
   });
 
   useEffect(() => {
+    if (status === "loading") return;
+    if (!userEmail) {
+      setReflections([]);
+      return;
+    }
     void (async () => {
       try {
         const res = await fetch("/api/reflections", { cache: "no-store" });
@@ -59,7 +67,7 @@ export default function ReflectionPage() {
         return;
       }
     })();
-  }, []);
+  }, [status, userEmail]);
 
   const onSubmit = async (values: ReflectionFormValues) => {
     const payload = {
