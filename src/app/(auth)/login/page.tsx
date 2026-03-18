@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 
@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
   const { data: session, status } = useSession();
 
   useEffect(() => {
@@ -47,7 +46,6 @@ export default function LoginPage() {
             >
               Continue with Google
             </Button>
-            {error ? <div className="text-sm text-rose-600">{error}</div> : null}
           </div>
         </CardContent>
       </Card>
