@@ -2,6 +2,9 @@ CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY,
   email text NOT NULL UNIQUE,
   name text NOT NULL,
+  onboarding_completed boolean NOT NULL DEFAULT false,
+  goal text NOT NULL DEFAULT '',
+  monthly_income integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
