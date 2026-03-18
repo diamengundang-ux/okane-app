@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 
+import { authOptions } from "@/lib/auth";
 import { generateInsights } from "@/lib/okane";
 import type { Transaction } from "@/lib/types";
 import { pool, testDb } from "@/lib/db";
@@ -20,37 +22,33 @@ type DbReflection = {
 
 export async function GET(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email?.trim() ?? "";
+    const name = session?.user?.name?.trim() ?? "";
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     await testDb();
-    const url = new URL(request.url);
-    const userId = url.searchParams.get("user_id");
     const now = new Date();
     const from = new Date(now);
     from.setDate(from.getDate() - 7);
 
-    const txQuery =
-      userId && userId.trim()
-        ? {
-            text: "select id, amount, type, category, created_at from transactions where user_id = $1 and created_at >= $2 order by created_at desc",
-            params: [userId.trim(), from.toISOString()]
-          }
-        : {
-            text: "select id, amount, type, category, created_at from transactions where created_at >= $1 order by created_at desc",
-            params: [from.toISOString()]
-          };
-    const reflQuery =
-      userId && userId.trim()
-        ? {
-            text: "select combined_text from reflections where user_id = $1 order by created_at desc limit 1",
-            params: [userId.trim()]
-          }
-        : {
-            text: "select combined_text from reflections order by created_at desc limit 1",
-            params: []
-          };
+    const userResult = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
+    const userId = userResult.rows[0]?.id;
+    if (!userId) {
+      const createdId = crypto.randomUUID();
+      await pool.query("insert into users (id, email, name) values ($1, $2, $3)", [createdId, email, name || email]);
+      return NextResponse.json([]);
+    }
 
     const [txResult, reflectionResult] = await Promise.all([
-      pool.query<DbTransaction>(txQuery.text, txQuery.params),
-      pool.query<DbReflection>(reflQuery.text, reflQuery.params)
+      pool.query<DbTransaction>(
+        "select id, amount, type, category, created_at from transactions where user_id = $1 and created_at >= $2 order by created_at desc",
+        [userId, from.toISOString()]
+      ),
+      pool.query<DbReflection>(
+        "select combined_text from reflections where user_id = $1 order by created_at desc limit 1",
+        [userId]
+      )
     ]);
 
     const transactions: Transaction[] = txResult.rows.map((r) => ({
