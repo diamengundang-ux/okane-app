@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 
+import { authOptions } from "@/lib/auth";
 import { pool, testDb } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -15,9 +17,27 @@ type DbTransaction = {
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email?.trim() ?? "";
+    const name = session?.user?.name?.trim() ?? "";
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     await testDb();
+    const userResult = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
+    const userId = userResult.rows[0]?.id;
+    if (!userId) {
+      const createdId = crypto.randomUUID();
+      await pool.query("insert into users (id, email, name) values ($1, $2, $3)", [createdId, email, name || email]);
+      const result = await pool.query<DbTransaction>(
+        "select id, user_id, amount, type, category, created_at from transactions where user_id = $1 order by created_at desc limit 200",
+        [createdId]
+      );
+      return NextResponse.json(result.rows);
+    }
+
     const result = await pool.query<DbTransaction>(
-      "select id, user_id, amount, type, category, created_at from transactions order by created_at desc limit 200"
+      "select id, user_id, amount, type, category, created_at from transactions where user_id = $1 order by created_at desc limit 200",
+      [userId]
     );
     return NextResponse.json(result.rows);
   } catch (err) {
@@ -29,9 +49,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email?.trim() ?? "";
+    const name = session?.user?.name?.trim() ?? "";
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     await testDb();
     const body = (await request.json()) as Partial<{
-      user_id: string;
       amount: number;
       type: "income" | "expense";
       category: string;
@@ -42,18 +66,15 @@ export async function POST(request: Request) {
     const type = body.type === "income" || body.type === "expense" ? body.type : null;
     const category = typeof body.category === "string" ? body.category.trim() : "";
     const createdAt = typeof body.created_at === "string" ? body.created_at : new Date().toISOString();
-    const demoUserId = "00000000-0000-0000-0000-000000000000";
-    const userId = typeof body.user_id === "string" ? body.user_id.trim() : demoUserId;
 
-    if (!userId || !Number.isFinite(amount) || !type || !category) {
+    if (!Number.isFinite(amount) || !type || !category) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    if (userId === demoUserId) {
-      await pool.query(
-        "insert into users (id, email, name) values ($1, $2, $3) on conflict (id) do nothing",
-        [demoUserId, "demo@okane.local", "Demo"]
-      );
+    const userResult = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
+    const userId = userResult.rows[0]?.id ?? crypto.randomUUID();
+    if (!userResult.rows[0]) {
+      await pool.query("insert into users (id, email, name) values ($1, $2, $3)", [userId, email, name || email]);
     }
 
     const id = crypto.randomUUID();
