@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { pool, testDb } from "@/lib/db";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type DbTransaction = {
   id: string;
@@ -20,7 +22,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.trim() ?? "";
     const name = session?.user?.name?.trim() ?? "";
-    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
 
     await testDb();
     const userResult = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
@@ -32,18 +34,18 @@ export async function GET() {
         "select id, user_id, amount, type, category, created_at from transactions where user_id = $1 order by created_at desc limit 200",
         [createdId]
       );
-      return NextResponse.json(result.rows);
+      return NextResponse.json(result.rows, { headers: { "Cache-Control": "no-store" } });
     }
 
     const result = await pool.query<DbTransaction>(
       "select id, user_id, amount, type, category, created_at from transactions where user_id = $1 order by created_at desc limit 200",
       [userId]
     );
-    return NextResponse.json(result.rows);
+    return NextResponse.json(result.rows, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("TRANSACTIONS ERROR:", err);
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500, headers: { "Cache-Control": "no-store" } });
   }
 }
 
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email?.trim() ?? "";
     const name = session?.user?.name?.trim() ?? "";
-    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
 
     await testDb();
     const body = (await request.json()) as Partial<{
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
     const createdAt = typeof body.created_at === "string" ? body.created_at : new Date().toISOString();
 
     if (!Number.isFinite(amount) || !type || !category) {
-      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid payload" }, { status: 400, headers: { "Cache-Control": "no-store" } });
     }
 
     const userResult = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
@@ -83,10 +85,10 @@ export async function POST(request: Request) {
       [id, userId, Math.abs(amount), type, category, createdAt]
     );
 
-    return NextResponse.json(inserted.rows[0], { status: 201 });
+    return NextResponse.json(inserted.rows[0], { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("TRANSACTIONS ERROR:", err);
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500, headers: { "Cache-Control": "no-store" } });
   }
 }
