@@ -38,6 +38,9 @@ async function ensureSchema() {
       created_at timestamptz not null default now()
     )
   `);
+  await pool.query(`alter table users add column if not exists onboarding_completed boolean not null default false`);
+  await pool.query(`alter table users add column if not exists goal text not null default ''`);
+  await pool.query(`alter table users add column if not exists monthly_income integer not null default 0`);
 
   await pool.query(`
     create table if not exists transactions (
