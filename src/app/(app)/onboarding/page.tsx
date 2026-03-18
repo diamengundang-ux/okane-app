@@ -4,13 +4,13 @@ import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PiggyBank, Receipt, Target, WalletCards } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatIDR } from "@/lib/okane";
-import { useOkaneStore, type OkaneState } from "@/stores/okane-store";
 
 function digitsOnly(value: string) {
   return value.replace(/[^\d]/g, "");
@@ -71,22 +71,39 @@ const GOALS: GoalOption[] = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const onboarding = useOkaneStore((s: OkaneState) => s.onboarding);
-  const setOnboardingGoal = useOkaneStore((s: OkaneState) => s.setOnboardingGoal);
-  const setOnboardingMonthlyIncome = useOkaneStore((s: OkaneState) => s.setOnboardingMonthlyIncome);
-  const completeOnboarding = useOkaneStore((s: OkaneState) => s.completeOnboarding);
+  const { status } = useSession();
 
   const [step, setStep] = useState(1);
-  const [selectedGoal, setSelectedGoal] = useState<GoalKey | null>(
-    onboarding.goal === "hemat_uang" || onboarding.goal === "nabung" || onboarding.goal === "tracking_pengeluaran"
-      ? onboarding.goal
-      : null
-  );
-  const [monthlyIncome, setMonthlyIncome] = useState<number>(onboarding.monthlyIncome ?? 0);
+  const [selectedGoal, setSelectedGoal] = useState<GoalKey | null>(null);
+  const [monthlyIncome, setMonthlyIncome] = useState<number>(0);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (onboarding.completed) router.replace("/dashboard");
-  }, [onboarding.completed, router]);
+    if (status === "loading") return;
+    if (status !== "authenticated") return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          onboardingCompleted?: boolean;
+          user?: { goal?: string; monthly_income?: number };
+        };
+        if (json.onboardingCompleted) {
+          router.replace("/dashboard");
+          return;
+        }
+        const goalRaw = typeof json.user?.goal === "string" ? json.user.goal : "";
+        if (goalRaw === "hemat_uang" || goalRaw === "nabung" || goalRaw === "tracking_pengeluaran") {
+          setSelectedGoal(goalRaw);
+        }
+        const incomeRaw = typeof json.user?.monthly_income === "number" ? json.user.monthly_income : 0;
+        setMonthlyIncome(Number.isFinite(incomeRaw) ? incomeRaw : 0);
+      } catch {
+        return;
+      }
+    })();
+  }, [router, status]);
 
   const formattedIncome = useMemo(() => {
     if (!monthlyIncome) return "";
@@ -104,8 +121,6 @@ export default function OnboardingPage() {
   const onBack = () => setStep((s) => Math.max(1, s - 1));
 
   const onNext = () => {
-    if (step === 2 && selectedGoal) setOnboardingGoal(selectedGoal);
-    if (step === 3) setOnboardingMonthlyIncome(monthlyIncome);
     setStep((s) => Math.min(totalSteps, s + 1));
   };
 
@@ -265,14 +280,24 @@ export default function OnboardingPage() {
               <Button
                 type="button"
                 className="flex-1"
-                onClick={() => {
-                  if (selectedGoal) setOnboardingGoal(selectedGoal);
-                  setOnboardingMonthlyIncome(monthlyIncome);
-                  completeOnboarding();
-                  router.replace("/add");
+                onClick={async () => {
+                  if (saving) return;
+                  setSaving(true);
+                  try {
+                    const res = await fetch("/api/onboarding", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ goal: selectedGoal ?? "", monthlyIncome })
+                    });
+                    if (res.ok) router.replace("/add");
+                  } finally {
+                    setSaving(false);
+                  }
                 }}
+                disabled={saving}
+                aria-busy={saving}
               >
-                Catat sekarang
+                {saving ? "Menyimpan..." : "Catat sekarang"}
               </Button>
             )}
           </div>
