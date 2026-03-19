@@ -63,7 +63,7 @@ export default function NewTransactionPage() {
   useEffect(() => {
     const current = form.getValues("category");
     if (!categoryOptions.includes(current)) {
-      form.setValue("category", categoryOptions[0], { shouldValidate: true });
+      form.setValue("category", categoryOptions[0]);
     }
   }, [categoryOptions, form]);
 
