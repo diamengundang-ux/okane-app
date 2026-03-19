@@ -159,7 +159,7 @@ export type AppState = {
   habit: HabitState;
 
   reset: () => void;
-  addTransaction: (tx: Transaction) => void;
+  addTransaction: (tx: Transaction) => Promise<boolean>;
   calculateConsistency: () => void;
   unlockFeatures: () => void;
   updateStreak: (date: string) => void;
@@ -269,29 +269,32 @@ export const useAppStore = create<AppState>()(
         habit: { streak: 0, lastEntryDate: null, activeDays: [] }
       }),
 
-    addTransaction: (tx) => {
-      const day = toDayKey(tx.date);
-      set((state) => ({ habit: nextStreak(state.habit, day) }));
+    addTransaction: async (tx) => {
+      try {
+        const meRes = await fetch("/api/me", { cache: "no-store", credentials: "include" });
+        if (!meRes.ok) return false;
 
-      void (async () => {
-        try {
-          const type = tx.amount >= 0 ? "income" : "expense";
-          const res = await fetch("/api/transactions", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              amount: Math.abs(tx.amount),
-              type,
-              category: tx.category,
-              created_at: tx.date
-            })
-          });
-          if (!res.ok) return;
-          await get().loadData();
-        } catch {
-          return;
-        }
-      })();
+        const type = tx.amount >= 0 ? "income" : "expense";
+        const res = await fetch("/api/transactions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            amount: Math.abs(tx.amount),
+            type,
+            category: tx.category,
+            created_at: tx.date
+          })
+        });
+        if (!res.ok) return false;
+
+        const day = toDayKey(tx.date);
+        set((state) => ({ habit: nextStreak(state.habit, day) }));
+        await get().loadData();
+        return true;
+      } catch {
+        return false;
+      }
     },
 
     updateStreak: (date) => {
