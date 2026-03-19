@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const DEMO_USER_ID = "00000000-0000-0000-0000-000000000000";
+const DEMO_EMAIL = "demo@okane.local";
 
 type DbUser = {
   id: string;
@@ -43,6 +44,29 @@ export async function GET() {
   }
 
   const user = found.rows[0];
+  if (user.id === DEMO_USER_ID && email !== DEMO_EMAIL) {
+    const newId = crypto.randomUUID();
+    const tempEmail = `__migrating__${newId}@okane.local`;
+    await query("insert into users (id, email, name, onboarding_completed) values ($1, $2, $3, true)", [
+      newId,
+      tempEmail,
+      name || email
+    ]);
+    await query("update transactions set user_id = $1 where user_id = $2", [newId, DEMO_USER_ID]);
+    await query("update reflections set user_id = $1 where user_id = $2", [newId, DEMO_USER_ID]);
+    await query("delete from users where id = $1", [DEMO_USER_ID]);
+    await query("update users set email = $1, name = $2 where id = $3", [email, name || email, newId]);
+    const refreshed = await query<DbUser>(
+      "select id, email, name, onboarding_completed, goal, monthly_income from users where id = $1",
+      [newId]
+    );
+    const nextUser = refreshed.rows[0];
+    return NextResponse.json(
+      { isNewUser: false, onboardingCompleted: true, user: nextUser },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const [userTxCount, userReflCount, demoTxCount, demoReflCount, realUsersCount] = await Promise.all([
     query<{ count: string }>("select count(*)::text as count from transactions where user_id = $1", [user.id]),
     query<{ count: string }>("select count(*)::text as count from reflections where user_id = $1", [user.id]),
