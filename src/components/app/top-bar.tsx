@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
+import { useAppStore } from "@/store/okane-store";
 
 function getNameFromEmail(email: string) {
   const base = email.split("@")[0] ?? "";
@@ -16,6 +17,7 @@ export function TopBar() {
   const { data: session } = useSession();
   const email = session?.user?.email ?? "";
   const name = session?.user?.name?.trim() || (email ? getNameFromEmail(email) : "Kamu");
+  const reset = useAppStore((s) => s.reset);
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
@@ -29,7 +31,10 @@ export function TopBar() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => void signOut({ callbackUrl: "/login" })}
+          onClick={() => {
+            reset();
+            void signOut({ callbackUrl: "/login" });
+          }}
           aria-label="Sign out"
         >
           <LogOut />
