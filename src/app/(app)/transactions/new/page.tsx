@@ -67,14 +67,22 @@ export default function NewTransactionPage() {
     }
   }, [categoryOptions, form]);
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     const signedAmount = values.type === "expense" ? -values.amount : values.amount;
-    addAppTransaction({
+    const ok = await addAppTransaction({
       id: createId(),
       amount: signedAmount,
       category: values.category,
       date: new Date().toISOString()
     });
+    if (!ok) {
+      setToast({
+        title: "Gagal menyimpan transaksi",
+        message: "Silakan coba lagi. Jika masih gagal, login ulang."
+      });
+      return;
+    }
+
     setToast({
       title: "Sip, transaksi tersimpan",
       message: `${formatIDR(values.amount)} · ${values.category}`
