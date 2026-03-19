@@ -134,14 +134,19 @@ export async function POST(request: Request) {
 
     const row = inserted.rows[0];
     if (row?.user_id === DEMO_USER_ID && email !== DEMO_EMAIL) {
+      await pool.query("update transactions set user_id = $1 where user_id = $2", [userId, DEMO_USER_ID]);
+      await pool.query("update reflections set user_id = $1 where user_id = $2", [userId, DEMO_USER_ID]);
+      await pool.query("update users set onboarding_completed = true where id = $1", [userId]);
       const fixed = await pool.query<DbTransaction>(
         "update transactions set user_id = $1 where id = $2 returning id, user_id, amount, type, category, created_at",
         [userId, row.id]
       );
-      return NextResponse.json(fixed.rows[0], { status: 201, headers: { "Cache-Control": "no-store" } });
+      const payload = { ...fixed.rows[0], meta: { resolvedUserId: userId } };
+      return NextResponse.json(payload, { status: 201, headers: { "Cache-Control": "no-store" } });
     }
 
-    return NextResponse.json(row, { status: 201, headers: { "Cache-Control": "no-store" } });
+    const payload = { ...row, meta: { resolvedUserId: userId } };
+    return NextResponse.json(payload, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("TRANSACTIONS ERROR:", err);
     const message = err instanceof Error ? err.message : String(err);
