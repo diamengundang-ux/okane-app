@@ -53,6 +53,29 @@ async function resolveUserIdByEmail(input: { email: string; name: string }) {
     return newId;
   }
 
+  if (input.email !== DEMO_EMAIL) {
+    const [userTxCount, userReflCount, demoTxCount, demoReflCount, realUsersCount] = await Promise.all([
+      pool.query<{ count: string }>("select count(*)::text as count from transactions where user_id = $1", [id]),
+      pool.query<{ count: string }>("select count(*)::text as count from reflections where user_id = $1", [id]),
+      pool.query<{ count: string }>("select count(*)::text as count from transactions where user_id = $1", [DEMO_USER_ID]),
+      pool.query<{ count: string }>("select count(*)::text as count from reflections where user_id = $1", [DEMO_USER_ID]),
+      pool.query<{ count: string }>("select count(*)::text as count from users where id <> $1", [DEMO_USER_ID])
+    ]);
+
+    const userHasAny =
+      Number(userTxCount.rows[0]?.count ?? "0") > 0 || Number(userReflCount.rows[0]?.count ?? "0") > 0;
+    const demoHasAny =
+      Number(demoTxCount.rows[0]?.count ?? "0") > 0 || Number(demoReflCount.rows[0]?.count ?? "0") > 0;
+    const isOnlyRealUser = Number(realUsersCount.rows[0]?.count ?? "0") === 1;
+
+    if (!userHasAny && demoHasAny && isOnlyRealUser) {
+      await pool.query("update transactions set user_id = $1 where user_id = $2", [id, DEMO_USER_ID]);
+      await pool.query("update reflections set user_id = $1 where user_id = $2", [id, DEMO_USER_ID]);
+      await pool.query("update users set onboarding_completed = true where id = $1", [id]);
+      await pool.query("delete from users where id = $1", [DEMO_USER_ID]);
+    }
+  }
+
   return id;
 }
 
@@ -124,7 +147,16 @@ export async function POST(request: Request) {
       [id, userId, sisa, perbaikan, kurangi, combinedText, createdAt]
     );
 
-    return NextResponse.json(inserted.rows[0], { status: 201, headers: { "Cache-Control": "no-store" } });
+    const row = inserted.rows[0];
+    if (row?.user_id === DEMO_USER_ID && email !== DEMO_EMAIL) {
+      const fixed = await pool.query<DbReflection>(
+        "update reflections set user_id = $1 where id = $2 returning id, user_id, sisa, perbaikan, kurangi, combined_text, created_at",
+        [userId, row.id]
+      );
+      return NextResponse.json(fixed.rows[0], { status: 201, headers: { "Cache-Control": "no-store" } });
+    }
+
+    return NextResponse.json(row, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("REFLECTIONS ERROR:", err);
     const message = err instanceof Error ? err.message : String(err);
